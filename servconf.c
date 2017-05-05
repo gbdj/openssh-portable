@@ -164,6 +164,7 @@ initialize_server_options(ServerOptions *options)
 	options->version_addendum = NULL;
 	options->fingerprint_hash = -1;
 	options->disable_forwarding = -1;
+	options->expose_auth_methods = -1;
 }
 
 /* Returns 1 if a string option is unset or set to "none" or 0 otherwise. */
@@ -333,6 +334,8 @@ fill_default_server_options(ServerOptions *options)
 		options->fingerprint_hash = SSH_FP_HASH_DEFAULT;
 	if (options->disable_forwarding == -1)
 		options->disable_forwarding = 0;
+	if (options->expose_auth_methods == -1)
+		options->expose_auth_methods = EXPOSE_AUTHMETH_NEVER;
 
 	assemble_algorithms(options);
 
@@ -418,6 +421,7 @@ typedef enum {
 	sAuthenticationMethods, sHostKeyAgent, sPermitUserRC,
 	sStreamLocalBindMask, sStreamLocalBindUnlink,
 	sAllowStreamLocalForwarding, sFingerprintHash, sDisableForwarding,
+	sExposeAuthenticationMethods,
 	sDeprecated, sIgnore, sUnsupported
 } ServerOpCodes;
 
@@ -561,6 +565,7 @@ static struct {
 	{ "allowstreamlocalforwarding", sAllowStreamLocalForwarding, SSHCFG_ALL },
 	{ "fingerprinthash", sFingerprintHash, SSHCFG_GLOBAL },
 	{ "disableforwarding", sDisableForwarding, SSHCFG_ALL },
+	{ "exposeauthenticationmethods", sExposeAuthenticationMethods, SSHCFG_ALL },
 	{ NULL, sBadOption, 0 }
 };
 
@@ -949,6 +954,12 @@ static const struct multistate multistate_tcpfwd[] = {
 	{ "remote",			FORWARD_REMOTE },
 	{ "local",			FORWARD_LOCAL },
 	{ NULL, -1 }
+};
+static const struct multistate multistate_exposeauthmeth[] = {
+	{ "never",			EXPOSE_AUTHMETH_NEVER },
+	{ "pam-only",			EXPOSE_AUTHMETH_PAMONLY },
+	{ "pam-and-env",		EXPOSE_AUTHMETH_PAMENV },
+	{ NULL, -1}
 };
 
 int
@@ -1836,6 +1847,11 @@ process_server_config_line(ServerOptions *options, char *line,
 			options->fingerprint_hash = value;
 		break;
 
+	case sExposeAuthenticationMethods:
+		intptr = &options->expose_auth_methods;
+		multistate_ptr = multistate_exposeauthmeth;
+		goto parse_multistate;
+
 	case sDeprecated:
 	case sIgnore:
 	case sUnsupported:
@@ -1990,6 +2006,7 @@ copy_set_server_options(ServerOptions *dst, ServerOptions *src, int preauth)
 	M_CP_INTOPT(ip_qos_bulk);
 	M_CP_INTOPT(rekey_limit);
 	M_CP_INTOPT(rekey_interval);
+	M_CP_INTOPT(expose_auth_methods);
 
 	/*
 	 * The bind_mask is a mode_t that may be unsigned, so we can't use
@@ -2104,6 +2121,8 @@ fmt_intarg(ServerOpCodes code, int val)
 		return fmt_multistate_int(val, multistate_tcpfwd);
 	case sFingerprintHash:
 		return ssh_digest_alg_name(val);
+	case sExposeAuthenticationMethods:
+		return fmt_multistate_int(val, multistate_exposeauthmeth);
 	default:
 		switch (val) {
 		case 0:
@@ -2277,6 +2296,7 @@ dump_config(ServerOptions *o)
 	dump_cfg_fmtint(sStreamLocalBindUnlink, o->fwd_opts.streamlocal_bind_unlink);
 	dump_cfg_fmtint(sUsePrivilegeSeparation, use_privsep);
 	dump_cfg_fmtint(sFingerprintHash, o->fingerprint_hash);
+	dump_cfg_fmtint(sExposeAuthenticationMethods, o->expose_auth_methods);
 
 	/* string arguments */
 	dump_cfg_string(sPidFile, o->pid_file);
